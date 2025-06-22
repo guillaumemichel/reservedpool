@@ -227,6 +227,20 @@ func TestReleaseWithZeroUsagePanics(t *testing.T) {
 func TestAcquireWhenFullyReserved(t *testing.T) {
 	p := New(4, map[cat]int{catA: 2, catB: 2, catC: 0})
 
+	// consume full reserve of catA
+	for range 2 {
+		if err := p.Acquire(catA); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// consume full reserve of catB
+	for range 2 {
+		if err := p.Acquire(catB); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// acquire by catC and catD should fail immediately
 	if err := p.Acquire(catC); !errors.Is(err, ErrUnsatisfiable) {
 		t.Fatalf("expected error: %v, got: %v", ErrUnsatisfiable, err)
 	}

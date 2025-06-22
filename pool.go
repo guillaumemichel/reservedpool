@@ -7,7 +7,7 @@ import (
 
 var (
 	ErrClosed        = errors.New("reservedpool: closed")
-	ErrUnsatisfiable = errors.New("reservedpool: unsatisfiable request, no resources available for the category")
+	ErrUnsatisfiable = errors.New("reservedpool: unsatisfiable request")
 )
 
 type Pool[K comparable] struct {
