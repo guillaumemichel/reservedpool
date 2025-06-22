@@ -5,15 +5,19 @@ import (
 	"sync"
 )
 
-var ErrClosed = errors.New("reservedpool: closed")
+var (
+	ErrClosed        = errors.New("reservedpool: closed")
+	ErrUnsatisfiable = errors.New("reservedpool: unsatisfiable request, no resources available for the category")
+)
 
 type Pool[K comparable] struct {
-	available int
-	reserve   map[K]int // per-category reserve
-	used      map[K]int // currently held per category
-	mu        sync.Mutex
-	cond      *sync.Cond
-	closed    bool
+	available    int
+	reserve      map[K]int // per-category reserve
+	used         map[K]int // currently held per category
+	mu           sync.Mutex
+	cond         *sync.Cond
+	reservedOnly bool // if true, only categories with reserves can be used
+	closed       bool
 }
 
 // New returns a pool with global limit max and the given reserves.
@@ -21,7 +25,7 @@ type Pool[K comparable] struct {
 func New[K comparable](max int, reserves map[K]int) *Pool[K] {
 	p := &Pool[K]{
 		available: max,
-		reserve:   make(map[K]int),
+		reserve:   make(map[K]int, len(reserves)),
 		used:      make(map[K]int),
 	}
 	sum := 0
@@ -29,7 +33,10 @@ func New[K comparable](max int, reserves map[K]int) *Pool[K] {
 		p.reserve[i] = r
 		sum += r
 	}
-	if sum > max {
+	if sum == max {
+		// Reserves use all available slots
+		p.reservedOnly = true
+	} else if sum > max {
 		panic("sum(reserves) > max")
 	}
 	p.cond = sync.NewCond(&p.mu)
@@ -41,6 +48,10 @@ func New[K comparable](max int, reserves map[K]int) *Pool[K] {
 func (p *Pool[K]) Acquire(cat K) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if p.reservedOnly && p.reserve[cat] == 0 {
+		return ErrUnsatisfiable
+	}
 
 	for {
 		if p.closed {
