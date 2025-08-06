@@ -85,13 +85,14 @@ func (p *Pool[K]) Release(cat K) {
 
 // Close marks the pool closed and wakes all waiters.
 // Further Acquire calls return ErrClosed. Releases are ignored.
-func (p *Pool[K]) Close() {
+func (p *Pool[K]) Close() error {
 	p.mu.Lock()
 	if !p.closed {
 		p.closed = true
 		p.cond.Broadcast()
 	}
 	p.mu.Unlock()
+	return nil
 }
 
 // canUse implements the rule described above (called with p.mu held).
