@@ -248,3 +248,66 @@ func TestAcquireWhenFullyReserved(t *testing.T) {
 		t.Fatalf("expected error: %v, got: %v", ErrUnsatisfiable, err)
 	}
 }
+
+/* ------------------------------------------------------------------
+   9. Stats results should be immutable
+-------------------------------------------------------------------*/
+
+func TestStats(t *testing.T) {
+	p := New(10, map[cat]int{catA: 3, catB: 2})
+	defer p.Close()
+
+	// acquire some slots to test stats calculation
+	for range 6 {
+		if err := p.Acquire(catA); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 7 {
+		go func() {
+			_ = p.Acquire(catB) // last attempts will block
+		}()
+	}
+	time.Sleep(10 * time.Millisecond) // let goroutines start
+
+	stats := p.Stats()
+
+	// Max should equal original capacity
+	if stats.Max != 10 {
+		t.Errorf("expected Max=10, got %d", stats.Max)
+	}
+
+	// Used should reflect current usage
+	if stats.Used[catA] != 6 {
+		t.Errorf("expected Used[catA]=6, got %d", stats.Used[catA])
+	}
+	if stats.Used[catB] != 4 {
+		t.Errorf("expected Used[catB]=4, got %d", stats.Used[catB])
+	}
+
+	// Reserves should match what was set
+	if stats.Reserves[catA] != 3 {
+		t.Errorf("expected Reserves[catA]=3, got %d", stats.Reserves[catA])
+	}
+	if stats.Reserves[catB] != 2 {
+		t.Errorf("expected Reserves[catB]=2, got %d", stats.Reserves[catB])
+	}
+
+	if stats.Queued[catA] != 0 {
+		t.Errorf("expected Queued[catA]=0, got %d", stats.Queued[catA])
+	}
+	if stats.Queued[catB] != 3 {
+		t.Errorf("expected Queued[catB]=3, got %d", stats.Queued[catB])
+	}
+
+	// Modifying returned maps should not affect internal state
+	stats.Used[catA] = 999
+	stats.Reserves[catA] = 999
+	newStats := p.Stats()
+	if newStats.Used[catA] != 6 {
+		t.Error("modifying returned stats affected internal state")
+	}
+	if newStats.Reserves[catA] != 3 {
+		t.Error("modifying returned stats affected internal state")
+	}
+}
